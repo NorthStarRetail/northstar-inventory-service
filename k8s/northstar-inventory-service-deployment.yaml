@@ -1,0 +1,93 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: northstar-inventory-service-configmap
+data:
+  active-profile: "default"
+  openapi-gateway-url: "http://northstar-gateway-service-svc:8181/api/inventory"
+  base-url: "http://northstar-gateway-service-svc:8181"
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: northstar-inventory-service-deployment
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: northstar-inventory-service-deployment
+  template:
+    metadata:
+      labels:
+        app: northstar-inventory-service-deployment
+    spec:
+      containers:
+        - env:
+            - name: JAVA_OPTS
+              value: "-XX:TieredStopAtLevel=1 -noverify -Xms128m -Xmx512m -Xss4m -XX:ParallelGCThreads=1 -XX:ConcGCThreads=1 -Djava.util.concurrent.ForkJoinPool.common.parallelism=1"
+            - name: SPRING_PROFILES_ACTIVE
+              valueFrom:
+                configMapKeyRef:
+                  key: active-profile
+                  name: northstar-inventory-service-configmap
+            - name: BASE_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: northstar-inventory-service-configmap
+                  key: base-url
+            - name: DISCOVERY_SERVER_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: northstar-discovery-service-configmap
+                  key: discovery-server-url
+            - name: OPENAPI_GATEWAY_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: northstar-inventory-service-configmap
+                  key: openapi-gateway-url
+            - name: DB_HOST
+              valueFrom:
+                configMapKeyRef:
+                  name: northstar-inventory-service-db-configmap
+                  key: db-host
+            - name: DB_PORT
+              valueFrom:
+                configMapKeyRef:
+                  name: northstar-inventory-service-db-configmap
+                  key: db-port
+            - name: DB_NAME
+              valueFrom:
+                configMapKeyRef:
+                  name: northstar-inventory-service-db-configmap
+                  key: db-name
+            - name: DB_USER
+              valueFrom:
+                secretKeyRef:
+                  name: northstar-inventory-service-db-secret
+                  key: db-user
+            - name: DB_PASS
+              valueFrom:
+                secretKeyRef:
+                  name: northstar-inventory-service-db-secret
+                  key: db-pass
+          image: northstar-inventory-service:latest
+          imagePullPolicy: IfNotPresent
+          name: northstar-inventory-service
+          ports:
+            - containerPort: 8189
+              protocol: TCP
+          resources: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: northstar-inventory-service-svc
+spec:
+  selector:
+    app: northstar-inventory-service-deployment
+  ports:
+    - protocol: TCP
+      port: 8189
+      targetPort: 8189
+  type: ClusterIP
