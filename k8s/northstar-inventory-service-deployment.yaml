@@ -6,6 +6,7 @@ data:
   active-profile: "default"
   openapi-gateway-url: "http://northstar-gateway-service-svc:8181/api/inventory"
   base-url: "http://northstar-gateway-service-svc:8181"
+  auth-server-url: "http://northstar-gateway-service-svc:8181/api/auth/oauth2/jwks"
 
 ---
 apiVersion: apps/v1
@@ -22,6 +23,10 @@ spec:
       labels:
         app: northstar-inventory-service-deployment
     spec:
+      initContainers:
+        - name: wait-for-db
+          image: busybox:1.35
+          command: ['sh', '-c', 'until nc -z northstar-inventory-service-db-svc 5432; do echo waiting for db; sleep 2; done;']
       containers:
         - env:
             - name: JAVA_OPTS
@@ -46,6 +51,11 @@ spec:
                 configMapKeyRef:
                   name: northstar-inventory-service-configmap
                   key: openapi-gateway-url
+            - name: AUTH_SERVER_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: northstar-inventory-service-configmap
+                  key: auth-server-url
             - name: DB_HOST
               valueFrom:
                 configMapKeyRef:
@@ -77,7 +87,29 @@ spec:
           ports:
             - containerPort: 8189
               protocol: TCP
-          resources: {}
+          resources:
+            limits:
+              cpu: 800m
+              memory: 1024Mi
+            requests:
+              cpu: 400m
+              memory: 512Mi
+          livenessProbe:
+            httpGet:
+              path: /actuator/health/liveness
+              port: 8189
+            initialDelaySeconds: 60
+            periodSeconds: 30
+            timeoutSeconds: 5
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /actuator/health/readiness
+              port: 8189
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
 ---
 apiVersion: v1
 kind: Service
